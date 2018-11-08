@@ -1,0 +1,1309 @@
+#include <errno.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <dirent.h>
+
+#define MAX_BUFFER 1024 // max line buffer
+#define MAX_ARGS 64     // max # args
+#define SEPARATORS " \t\n" // token separators
+
+extern char **environ;
+char* curDir;
+
+/*********** Notes ****/
+//Returning -1 or 0 if error or success is not great, use EXIT_FAILURE instead
+//using gdb to help debug code - reads debugging symbols in your program
+//-g debugging command in makefile has special debugging commands.
+
+//for ex: adding breakpoints
+//Ex rub: gdb fuck_t
+// (gdb) b t_fork.c:266 (break point at desired line number)
+// 'n' runs the next command
+
+//example fork
+/*
+typedef struct ioops{
+    char * input
+    char * output
+    char * append
+    int operaton
+};
+*/
+
+/***** FUNCTION DEFINITIONS ****/
+void funcFilez(const char *target);
+void funcMimic(const char *srcM, const char *dstM, const char *arg3);
+void batchFileCheck(const char* argCheck);
+void funcChdir(const char *path, const char *path2);
+void funcErase(const char *file, const char *path2);
+void funcHelp(const char* argCheck);
+void funcEnviron(const char *arg1);
+void funcMorph (const char* path, const char* path2);
+int directoryCheck( const char* path);
+int fileCheck(const char* path);
+void funcRmdirz(const char* path);
+void funcMkdirz(const char* path);
+const char* parentCheck( const char* path);
+int directoryEmptyCheck(const char* path);
+const char* getEndOfPath(const char* path);
+void copyFileToDestination(const char* filePath, const char* givenDirectory);
+void copyFileToDestinationFULLPATH(const char* filePath, const char* givenDirectory);
+int systemUsingFork(char* command);
+
+
+
+/********* FUNCTIONS *********/
+/*funcFilez:
+ *
+ * For this function, the argument args[1] is passed in as *target.
+ * It first checks to see if the target is not null by passing the path
+ * into the stat function.
+ * Success: If stat (file check) is a success, it returns 0.
+ * fopen reads the target file in and prints out its contents
+ * byte by byte until it reaches EOF. It closes the file after it is finished.
+ *
+ * Failure: Is stat (file check) is a failure, it returns -1.
+ * an error message is routed routed to stderrr.
+ *
+ * If no other targets are specified, the program
+ * ptints out the files int he current working directory.
+ * */
+
+
+
+void funcFilez(const char *target ) {
+    struct stat check;
+    int errnum;
+
+    if (target != NULL) {
+        if (stat(target, &check) != -1) { //checks if target is a file
+
+            FILE *fo = fopen(target, "r");
+            int c = 0;
+            while ((c = fgetc(fo)) != EOF) {
+                printf("%c", c);
+            }
+            fclose(fo);
+        }
+        else { //if stat returns 0
+            errnum = errno;
+            fprintf(stderr, "ERROR: Unable to open file: %s\n", strerror(errnum));
+        }
+    }
+
+    else { //if args[1] is null, no target specified
+
+        systemUsingFork("ls -1\n");
+    }
+}
+
+/*funcMimic
+ * The user passes 3 arguments into the function (discluding the
+ * word "mimic" . the first if function makes sure
+ * that the user is passing in two orguments. (For two files)
+ * Fopen is used to open the first file for reading, and the second file for writing.
+ * mimicFile is a char array that is created to store the bytes that are
+ * to be written to the file that needs to be copied. After the while loop
+ * is finished reading the bytes of the first file. fWrite is called
+ * to pass the bytes of the first file from mimicArray into the second file.
+ * Both files are closed after the process is finished
+ *
+ * ERROR CHECK: If the file cannot be opened, ERROR is routed to stderr.
+ * ERROR CHECK: If the wrong number of arguments are passed in, ERROR is routed to stderr.
+ * */
+void funcMimic(const char *srcM, const char *dstM, const char *arg3){
+    struct stat check;
+    int errnum;
+
+    if (arg3 == NULL && dstM != NULL) { //Case: 2 arguments passed in
+
+        char mimicFile[MAX_BUFFER] = {0};
+        int c = 0;
+
+        /*********** ERRORS ***********/
+
+         //src is existing directory, dst existing file **ERROR& cannot write directory to a file
+        if(directoryCheck(srcM) != 0 && fileCheck(srcM) == 0 && directoryCheck(parentCheck(dstM)) == 0) {
+            printf("%s is an existing directory and %s is a file\n", srcM, dstM);
+
+            fprintf(stderr, "ERROR: cannot write directory to a file\n");
+        }
+
+
+        //src missing file, dst existing file **ERROR: nothing to be copied
+        else if(fileCheck(srcM) != 0 && fileCheck(dstM) == 0) {
+            printf("%s file is missing and %s is an existing file \n", srcM, dstM);
+
+            fprintf(stderr, "ERROR: Nothing to be copied\n");
+        }
+
+
+        //src missing file, src existing file dst existing directory *** ERROR
+        else if( (fileCheck(srcM) != 0 && directoryCheck(srcM) == 0) && directoryCheck(dstM) != 0) {
+            printf("%s is A MISSING file and %s is a directory\n", srcM, dstM);
+
+            fprintf(stderr, "ERROR: Nothing to be copied\n");
+        }
+
+        //src existing directory, dst missing file : **ERROR
+        else if(directoryCheck(srcM) != 0 && fileCheck(dstM) != 0 && directoryCheck(parentCheck(dstM)) == 0) {
+            printf("%s is directory and %s is not a file\n", srcM, dstM);
+
+            fprintf(stderr, "ERROR: Nothing to be copied\n");
+        }
+
+        //missing file , missing file : **ERROR
+        else if(fileCheck(srcM) != 0 && fileCheck(dstM) != 0 && directoryCheck(parentCheck(dstM)) == 0) {
+            printf("%s is NOT a file and %s is NOT a file\n", srcM, dstM);
+
+            fprintf(stderr, "ERROR: Nothing to be copied\n");
+        }
+
+
+        //existing file, missing directory: **ERROR
+        else if((directoryCheck(srcM) == 0) && fileCheck(srcM) == 0 && ((directoryCheck(dstM) == 0) && fileCheck(dstM) != 0)) {
+            printf("%s is a file and %s is not a directory\n", srcM, dstM);
+
+            fprintf(stderr, "ERROR: Nothing to be copied\n");
+        }
+
+        //missing file, missing directory error: **ERROR you cannot write a missing file
+        else if((fileCheck(srcM) != 0  && directoryCheck(srcM) == 0) && directoryCheck(dstM) != 0) {
+            printf("%s is not a file or directory and %s is a directory\n", srcM, dstM);
+
+            fprintf(stderr, "ERROR: Nothing to be copied\n");
+        }
+
+
+        /************** SUCCESSES *************/
+
+        //src existing file , dst existing directory **SUCCESS*
+        else if (fileCheck(srcM) == 0 && directoryCheck(srcM) == 0 && directoryCheck(dstM) != 0){
+
+            printf("%s is a file and %s is a directory\n", srcM, dstM);
+
+
+                /*This function creates a concatnates
+                 * the source file to the end of
+                 * the directory path. The result is the full
+                 * path, which is then used in fopen
+                 * below. The file will be written to this path.
+                 * if this file does not already exist in the directory,
+                 * it will be created as noted by 'w'.*/
+
+
+                char givenFile[50] = " ";
+                char fullPath[50] = " ";
+                strcpy(givenFile, srcM); //source copied to begin array
+                strcpy(fullPath, dstM); //destination copied to fullPath array
+
+                /*This function gets the part of the path containg
+                 * the file, by checking to see if a '/' is present
+                 * and copy after byte after that. After getting
+                 * the file extension, it is concatanated
+                 * to the end of the full path given in the destination.*/
+
+                int b = sizeof(givenFile);
+                for(b; b <= sizeof(givenFile); b--){
+                    if(givenFile[b] == '/') {
+                        int fC = 0;
+                        while(b < sizeof(givenFile)){
+                            givenFile[fC] = givenFile[b];
+                            fC++;
+                            b++;
+                        }
+                        givenFile[fC+1]= '\0';
+                        break;
+                    }
+                    //else: do nothing
+                }
+
+
+                strcat(fullPath,givenFile); //adds file to end of path
+
+                printf("This is the final path: %s\n", fullPath);
+
+                FILE *toR = fopen(srcM, "r"); //opens source file to to READ
+                FILE *srcdstM = fopen(fullPath,"w"); //opens path to write
+
+                int i = 0;
+                int c = 0;
+
+                /*This loop copies byte by byte from the file specified,
+                 * to the char aray 'mimicFile'. when the while reaches EOF,
+                 * the mimicFile array is written to the source destination
+                 * (directory with new file path)
+                 * */
+
+
+                while ((c = fgetc(toR)) != EOF) {
+                    mimicFile[i] =(char)c;
+                    i++;
+                }
+                fwrite(mimicFile, sizeof(mimicFile), 1, srcdstM);
+
+                fclose(toR);
+                fclose(srcdstM);
+
+        }
+
+
+        //src is existing file, dst is existing file
+        else if ( (fileCheck(srcM) == 0 && directoryCheck(srcM) == 0)
+                  && (fileCheck(dstM) == 0 && directoryCheck(dstM) ==0) ) {
+
+            printf("%s is a file and %s is a file\n", srcM, dstM);
+
+            FILE *toR = fopen(srcM, "r");
+            FILE *toW = fopen(dstM, "w+");
+            int i = 0;
+
+            while ((c = fgetc(toR)) != EOF) {
+                mimicFile[i] =(char)c;
+                i++;
+            }
+
+            fwrite(mimicFile, sizeof(mimicFile), 1, toW); //writes byte by byte to toW (2nd file)
+
+            fclose(toR);
+            fclose(toW);
+        }
+
+
+        //(-r not supplied) src existing directory, dst is an existing directory: SUCCESS
+        else if(directoryCheck(srcM) != 0 && directoryCheck(dstM) != 0) {
+
+            /* SUCCESS */
+            if(directoryEmptyCheck(srcM) != -1){
+                printf("Directory is empty! the contents of %s can be copied into %s\n", srcM, dstM);
+
+                /*
+                 * This following code segement gets the name of the directory from the
+                 * end of srcM by calling the getEndOfPath function. it changes the
+                 * directory to the dstM to create the directory and then changes
+                 * back to the current directory (the defined global variable
+                 * that keeps track of the current directory)
+                 */
+                funcChdir(dstM, NULL);
+
+                const char* fileSrc= " ";
+                fileSrc = getEndOfPath(srcM);
+
+                if (mkdir(fileSrc, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == -1) {
+                    fprintf(stderr, "ERROR: Directory failed to create.\n");
+                }
+                funcChdir((const char*)curDir, NULL);
+            }
+
+            /* ERROR */
+            else{
+                fprintf(stderr, "Directory must be empty. Must use -r argument for non empty directory.\n");
+            }
+        }
+
+        //src existing directory, dst is not an existing directory
+
+        else if(directoryCheck(srcM) != 0 && ( directoryCheck(dstM) == 0 && fileCheck(dstM) != 0 && directoryCheck(parentCheck(dstM)) != 0)) {
+            printf("%s is a directory and %s is not a directory.. but it might have a parent!\n", srcM, dstM);
+
+
+            /* SUCCESS */
+            //if srcM directory is empty, the directory is copied to the parent of dstM (if the parent exists)
+            if (directoryEmptyCheck(srcM) != -1) {
+                /*
+                     * This following code segement gets the name of the directory from the
+                     * end of srcM by calling the getEndOfPath function. it changes the
+                     * directory to the dstM to create the directory and then changes
+                     * back to the current directory (the defined global variable
+                     * that keeps track of the current directory)
+                     */
+
+                /*This code makes creates the folder inside the parent directory.
+                 * */
+                const char *parentdstM = " ";
+                parentdstM = parentCheck(dstM);
+
+                funcChdir(parentdstM, NULL);
+
+                const char *fileSrc = " ";
+                fileSrc = getEndOfPath(srcM);
+
+                if (mkdir(fileSrc, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == -1) {
+                    fprintf(stderr, "ERROR: Directory failed to create.\n");
+                }
+                funcChdir((const char *) curDir, NULL);
+            }
+        }
+
+            /* ERROR: Directory is not empty!*/
+        else{
+            fprintf(stderr, "Directory must be empty. Must use -r argument for non empty directory.\n");
+        }
+
+
+    }
+
+    else {
+        fprintf(stderr, "ERROR: Wrong number of arguments passed in.\n");
+    }
+}
+
+
+/*funcChdir
+ * If the current path is equal to null (just Chdir was passed in) the
+ * program will print the current path at that current directory by
+ * calling the system() function.
+ *
+ * If an argument is passed in (path2 == NULL), THe program
+ * will create a new array (acting as a buffer). It will
+ * call getcwd to get the pathname of the current working direocy
+ * by passing in the buffer array currDirr. After returning the
+ * buf argument, the program calls chdir to change the current directory.
+ * the New directory is passed in the putenv to set th enviroment variables
+ * based on the the current directory.
+ *
+ * ERRORS: If putenv fails, Error printed to stderr
+ *
+ * ERRORS: If wrong number of arguments are passed in, Error is printed to stderr
+ * */
+void funcChdir(const char *path,const char *path2) {
+    struct stat check;
+
+    if (path == NULL) {
+        systemUsingFork("pwd");
+    }
+
+    else if ( path2 == NULL) {
+        char currDir[100];
+        char *newDir = getcwd(currDir, sizeof(currDir));
+        if(directoryCheck(path)) {
+            chdir(path);
+        }
+        if(putenv(newDir) != 0) {
+            fprintf(stderr, "ERROR\n");
+        }
+    }
+
+    else{
+        fprintf(stderr, "ERROR: Wrong number of arguments passed in.\n");
+    }
+}
+
+/*funcErase
+ *This function removes the file if one argument is passed in.
+ * ERRORS: If more than 1 argument is passed in OR the the file
+ * is unable to be removed, error is routed to stderr
+ * */
+void funcErase(const char *file, const char *path2){
+    if( path2 == NULL) {
+
+        int e = remove(file);
+        int errnum;
+        if (e != 0) {
+            errnum = errno;
+            fprintf(stderr, "ERROR: Unable to remove file: %s\n", strerror(errnum));
+        }
+    }
+
+    else{
+        fprintf(stderr, "ERROR: Wrong number of arguments passed in.\n");
+
+    }
+}
+
+/*batchFileCheck
+ * This function checks to see whether a batchfile has been passed in or not.
+ * The function reads the file passed into batchFileCheck. If the file is not able
+ * to be opened, an error is routed to stderr. If it is opened, the argCheck
+ * file descriptor is routed to STDIN.
+ *
+ * ERRORS: Errors are routed to STDERR if the argCheck file is not opened
+ * and if there is an error accessing the file descriptor for dup2.
+ * */
+void batchFileCheck(const char* argCheck){
+    int fd;
+    setbuf(stdout, NULL);
+    fd = open(argCheck, O_RDONLY);
+
+    if (fd < 0) { //returns -1 if file cant be opened
+        int errnum;
+        errnum = errno;
+        fprintf(stderr, "ERROR: %s\n", strerror(errnum));
+        close(fd);
+    }
+
+    else {
+        int dupC = dup2(fd, STDIN_FILENO);
+
+        if (dupC == -1) {
+            int errnum;
+            errnum = errno;
+            fprintf(stderr, "ERROR: %s\n", strerror(errnum));
+            close(dupC);
+        }
+    }
+
+    close(fd);
+}
+
+/*funcHelp
+ * This functions prints out the directions on using the program
+ * by printing out the README.txt file (that contains the directions).
+ * fopen is used to open the file specified by the README.txt file path.
+ * Its file path is specified to make sure it can be opened in any directory.
+ * It prints char by char until it reaches EOF.
+ *
+ * ERRORS: if any arguments are passed in after the user types "help"
+ * the program will throw an error.
+ * */
+void funcHelp(const char* argCheck){
+
+    if(argCheck == NULL) {
+        FILE *fo = fopen("/home/lisaegede96/projects/1/README.txt", "r");
+        int c = 0;
+        while ((c = fgetc(fo)) != EOF) {
+            printf("%c", c);
+        }
+        fclose(fo);
+    }
+    else{
+        fprintf(stderr, "ERROR: Wrong number of arguments passed in.\n");
+    }
+}
+
+/*funcEnviron
+ *This function lists all the enviroment strings.
+ *
+ * ERROR: if the user types in another argument after the 'environ' argument,
+ * the program will route an error to stderr
+ * */
+
+void funcEnviron(const char *arg1){
+    char **env = environ;
+
+    if (arg1 == NULL ) {
+        while (*env) printf("%s\n", *env++);
+    }
+
+    else {
+        fprintf(stderr, "ERROR: Too many arguments passed in.\n");
+    }
+}
+
+/*
+ * This function checks to see whether a specified path is a directory or not.
+ * The stat function obtains info about the path and passes into the buf specified as eheck.
+ * if it is successful the function will return a non zero value
+ * if the file is a directory.
+ * */
+int directoryCheck( const char* path){
+    struct stat check;
+    if(stat(path,&check) != 0) {
+        return 0;
+    }
+    else{
+        return S_ISDIR(check.st_mode); //returns non zero if path is a directory
+    }
+}
+
+int fileCheck(const char* path){
+    FILE *fCheck;
+    fCheck = fopen(path, "r");
+    if(fCheck != NULL) {
+        fclose(fCheck);
+        return 0; //return 0 if file exists
+    }
+    else {
+        fprintf(stderr, "%s File does not exist\n", path);
+    }
+    return -1;
+}
+
+/*funcMorph takes in two arguments. It moves a file (source) into a directory
+ * if the directory exists. If the directory does not exist, it will
+ * enter a loop to check after each '/' to identify whether or not its parent exists.
+ *
+ * CASES:
+ * Both paths do not exist: error
+ * Both paths are files: call mimic
+ * if source is a file and destination is a directory,- move file
+ * if source is a file and destination is not a directory (check parent), success - move file
+ * ERRORS: All routed to stderr
+ * */
+void funcMorph (const char* path, const char* path2){
+    const char* srcM = path; //source is path
+    const char* dstM = path2; //destination is path2
+    int charOccurrences = 0; //counts number of times '/' occurs
+    int charOCounter = 0;
+    struct stat check;
+    char mimicFile[MAX_BUFFER] = { 0 };
+
+    char pcFinal[50];
+    strcpy(pcFinal,dstM);
+
+    /** if both paths do not exist **/
+    if (path == NULL || path2 == NULL) {
+
+        fprintf(stderr, "ERROR: Source and destination must be specified\n");
+    }
+
+    /** if source is a file and destination is a file **/
+    else if((stat(srcM, &check) != -1) && (stat(dstM, &check) != -1)) {
+        funcMimic(srcM,dstM, NULL);
+    }
+
+    /** if source if a file and destination is not a file, check to see if it is a directory **/
+    else if ((stat(srcM, &check) != -1) && (directoryCheck(dstM) != 0)) {
+
+        /** SUCCESS **/
+        /*This function creates a concatnates
+         * the source file to the end of
+         * the directory path. The result is the full
+         * path, which is then used in fopen
+         * below. The file will be written to this path.
+         * if this file does not already exist in the directory,
+         * it will be created as noted by 'w'.*/
+        char begin[50];
+        char fullPath[50];
+        strcpy(begin, srcM); //source copied to begin array
+        strcpy(fullPath, dstM); //destination copied to fullPath array
+        strcat(fullPath,begin); //adds file to end of path
+
+        //printf("This is the final path: %s", fullPath);
+
+        FILE *toR = fopen(srcM, "r"); //opens source file to to READ
+        FILE *srcdstM = fopen(fullPath,"w"); //opens path to write
+
+        int i = 0;
+        int c = 0;
+
+        /*This loop copies byte by byte from the file specified,
+         * to the char aray 'mimicFile'. when the while reaches EOF,
+         * the mimicFile array is written to the source destination
+         * (directory with new file path)
+         * */
+        while ((c = fgetc(toR)) != EOF) {
+            mimicFile[i] =(char)c;
+            i++;
+        }
+        fwrite(mimicFile, sizeof(mimicFile), 1, srcdstM);
+
+        fclose(toR);
+        fclose(srcdstM);
+
+        int e = remove(srcM); //original file is removed to indiate 'move'
+        int errnum;
+        if (e != 0) {
+            errnum = errno;
+            fprintf(stderr, "ERROR: Unable to remove file: %s\n", strerror(errnum));
+        }
+    }
+
+    /** if source is a file and destination is not a directory **/
+    else if ((stat(srcM, &check) != -1) && (directoryCheck(dstM) == 0)) {
+        /*This loop counts the number of times '/' occurs. This will determine
+         * how many times the for loop checks to determine whether the
+         * path is a directory or not*/
+        int b = 0;
+        for (b; b < sizeof(pcFinal); b++) {
+            if (pcFinal[b] == '/') {
+                charOccurrences = charOccurrences + 1;
+            }
+        }
+        charOCounter = charOccurrences;
+
+        /** checking number of '/'. must be > 0. **/
+        int k = sizeof(pcFinal);
+
+        /*Loop starts at the end of the pcFinal array.
+         * loop updates until char0counter is decremented to a value
+         * that does not contain '/' (not a path). After each (new) end of path
+         * is found, the if statement below checks to see whether or not
+         * this new path is a directory. it will continue to loop until
+         * the path can no longer be determined to be a directory.*/
+        while( charOCounter > -1) {
+            for(k; k <= sizeof(pcFinal); k--) {
+                if (pcFinal[k] == '/') {
+                    pcFinal[k+1] ='\0';
+
+                    if (directoryCheck((const char*)pcFinal) != 0)
+                    {
+                        char mimicFile[MAX_BUFFER] = {0};
+
+                        /** SUCCESS **/
+                        char begin[50];
+                        char fullPath[50] = {0};
+                        strcpy(begin, srcM);
+                        strcpy(fullPath, dstM);
+                        strcat(fullPath,begin);
+
+
+                        FILE *toR = fopen(srcM, "r"); //file to READ
+                        FILE *srcdstM = fopen(fullPath,"w"); //file path to write
+
+                        int i = 0;
+                        int c = 0;
+                        while ((c = fgetc(toR)) != EOF) {
+                            mimicFile[i] =(char)c;
+                            i++;
+                        }
+                        fwrite(mimicFile, sizeof(mimicFile), 1, srcdstM);
+
+                        fclose(toR);
+                        fclose(srcdstM);
+
+                        int e = remove(srcM);
+                        int errnum;
+                        if (e != 0) {
+                            errnum = errno;
+                            fprintf(stderr, "ERROR: Unable to remove file: %s\n", strerror(errnum));
+                        }
+
+                    }
+                    charOCounter = charOCounter - 1; //after each loop, char counter is decremented
+                }
+            }
+            break; //breaks out of while loop
+        }
+
+    }
+
+    else {
+        fprintf(stderr, "ERROR: Source must be a file & Destination must be a directory.\n");
+    }
+
+}
+
+void funcRmdirz(const char* path){
+
+    struct stat check = { 0 };
+    if (stat(path, &check) == 0 ) { //path is not empty
+        int stat = rmdir(path);
+        if (stat== -1){
+            fprintf(stderr, "ERROR: Directory failed to create.");
+        }
+    }
+}
+
+const char* parentCheck( const char* path){
+
+    char fullPath[75] = { 0 };
+    strcat(fullPath, path);
+
+    int origSize = sizeof(fullPath);
+    int i = origSize;
+
+    while (i <= sizeof(fullPath)) {
+        if(fullPath[origSize] == '/') { //accounts for trailing slash
+            fullPath[origSize+1] = '\0';
+        }
+
+        if(fullPath[i] == '/'){
+            fullPath[i+1] = '\0';
+            break;
+        }
+        else {
+            i--;
+        }
+    }
+
+    path = (const char*)fullPath;
+    return path;
+}
+
+
+void funcMkdirz(const char* path){
+
+    path = parentCheck(path);
+
+    if ( directoryCheck(path) != 0) { //path does not exist && parent path does exist
+        if (mkdir(path,S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == -1) {
+            fprintf(stderr, "ERROR: Directory failed to create.\n");
+        }
+    }
+    else {
+        fprintf(stderr, "ERROR: Parent not a directory / Directory is not empty\n");
+    }
+}
+
+int directoryEmptyCheck(const char* path){
+    /** SUCCESS, CHECK IF DIRECTORY IS EMPTY! **/
+
+    int emptyCount = 0;
+
+    DIR *dstDIR;
+    struct dirent *dD;
+    if ((dstDIR = opendir(path)) == NULL) {
+        fprintf(stderr, "ERROR");
+
+    }
+    else {
+
+        while (readdir(dstDIR) != NULL) {
+
+            emptyCount = emptyCount + 1;
+        }
+    }
+
+    /** Is directory empty? **/
+    if(emptyCount < 3) {
+        printf("This is  an empty directory");
+        return 0;
+    }
+
+    else if(emptyCount > 2) {
+        printf("This directory is NOT empty.");
+        return -1;
+    }
+}
+
+
+/*This function gets the part of the path containg
+             * the file, by checking to see if a '/' is present
+             * and copy after byte after that. After getting
+             * the file extension, it is concatanated
+             * to the end of the full path given in the destination.*/
+
+const char* getEndOfPath(const char* path){
+
+    char givenFile[50] = " ";
+    strcpy(givenFile, path);
+
+    int b = sizeof(givenFile);
+    for(b; b <= sizeof(givenFile); b--){
+        if(givenFile[b] == '/') {
+            int fC = 0;
+            while(b < sizeof(givenFile)){
+                givenFile[fC] = givenFile[b+1];
+                fC++;
+                b++;
+            }
+            givenFile[fC+1]= '\0';
+            break;
+        }
+        //else: do nothing
+    }
+
+    path = (const char*)givenFile;
+
+    return path;
+
+}
+
+/*
+ * This functions copy the file (as given by the file path) to the given
+ * directory (as given by the directory path).
+ * */
+void copyFileToDestination(const char* filePath, const char* givenDirectory){
+
+
+    if (fileCheck(filePath) == 0 && directoryCheck(filePath) == 0 && directoryCheck(givenDirectory) != 0){
+
+        printf("%s is a file and %s is a directory\n", filePath, givenDirectory);
+
+
+        /*This function creates a concatnates
+         * the source file to the end of
+         * the directory path. The result is the full
+         * path, which is then used in fopen
+         * below. The file will be written to this path.
+         * if this file does not already exist in the directory,
+         * it will be created as noted by 'w'.*/
+
+        char mimicFile[MAX_BUFFER] = {0};
+
+        char givenFile[50] = " ";
+        char fullPath[50] = " ";
+        strcpy(givenFile, filePath); //source copied to begin array
+        strcpy(fullPath, givenDirectory); //destination copied to fullPath array
+
+        /*This function gets the part of the path containg
+         * the file, by checking to see if a '/' is present
+         * and copy after byte after that. After getting
+         * the file extension, it is concatanated
+         * to the end of the full path given in the destination.*/
+
+        int b = sizeof(givenFile);
+        for(b; b <= sizeof(givenFile); b--){
+            if(givenFile[b] == '/') {
+                int fC = 0;
+                while(b < sizeof(givenFile)){
+                    givenFile[fC] = givenFile[b];
+                    fC++;
+                    b++;
+                }
+                givenFile[fC+1]= '\0';
+                break;
+            }
+            //else: do nothing
+        }
+
+
+        strcat(fullPath,givenFile); //adds file to end of path
+
+        printf("This is the final path: %s\n", fullPath);
+
+        FILE *toR = fopen(filePath, "r"); //opens source file to to READ
+        FILE *srcdstM = fopen(fullPath,"w"); //opens path to write
+
+        int i = 0;
+        int c = 0;
+
+        /*This loop copies byte by byte from the file specified,
+         * to the char aray 'mimicFile'. when the while reaches EOF,
+         * the mimicFile array is written to the source destination
+         * (directory with new file path)
+         * */
+
+
+        while ((c = fgetc(toR)) != EOF) {
+            mimicFile[i] =(char)c;
+            i++;
+        }
+
+        fwrite(mimicFile, sizeof(mimicFile), 1, srcdstM);
+
+        fclose(toR);
+        fclose(srcdstM);
+
+    }
+    else{
+        fprintf(stderr, "There is an error copying the file to directory");
+    }
+
+}
+
+void copyFileToDestinationFULLPATH( const char* filePath , const char* givenDirectory ){
+
+    char mimicFile[MAX_BUFFER] = { 0 };
+
+    char beginPath[50] = { 0 };
+    char copiedFilePath[50] = { 0 };
+
+    strcpy(beginPath, curDir);
+    strcpy(copiedFilePath, filePath);
+    strcat(beginPath, "/");
+    strcat(beginPath, copiedFilePath);
+
+    printf("Abosolute fullllll path is %s\n", beginPath);
+
+    FILE *toR = fopen(filePath, "r"); //opens source file to to READ
+    if (toR == NULL){
+        fprintf(stderr, "Error reading file.");
+    }
+
+    char beginPathDirectory[50] = { 0 };
+    char copiedFilePathDirectory[50] = { 0 };
+
+    strcpy(beginPathDirectory, curDir);
+    strcpy(copiedFilePathDirectory, givenDirectory);
+    strcat(beginPathDirectory, "/");
+    strcat(beginPathDirectory, copiedFilePathDirectory);
+
+    printf(" path  is now  %s\n", givenDirectory);
+
+    // path should look like this: newYo/aAnotha1/test567.txt
+
+    FILE *srcdstM = fopen(givenDirectory, "w+"); //opens path to write, created if DNE
+
+
+    if (srcdstM == NULL){
+        fprintf(stderr, "Error writing to file.\n");
+    }
+
+
+    int i = 0;
+    int c = 0;
+
+    /*This loop copies byte by byte from the file specified,
+     * to the char aray 'mimicFile'. when the while reaches EOF,
+     * the mimicFile array is written to the source destination
+     * (directory with new file path)
+     * */
+
+
+    while ((c = fgetc(toR)) != EOF) {
+        mimicFile[i] =(char)c;
+        i++;
+    }
+
+    //fwrite(mimicFile, sizeof(mimicFile), 1, srcdstM);
+
+    fclose(toR);
+    fclose(srcdstM);
+
+}
+
+int systemUsingFork(char* command){
+    {
+        int status;
+        pid_t childPid;
+        switch (childPid = fork()) {
+            case -1: /* Error */
+                return -1;
+            case 0: /* Child */
+                //execvp((const char*)command,1);
+                execl("/bin/sh", "sh", "-c", command, (char *) NULL); _exit(127); /* Failed exec */
+            default: /* Parent */
+                if (waitpid(childPid, &status, 0) == -1)
+                    return -1;
+                else
+                    return status;
+        }
+    }
+
+
+}
+
+int main (int argc, char **argv) {
+    setbuf(stdout, NULL);
+    char buf[MAX_BUFFER]; // line buffer
+    char *args[MAX_ARGS]; // pointers to arg
+    char **arg;            // working pointer
+    char *prompt = "==>"; // shell prompt
+
+    char display[FILENAME_MAX];
+
+    int boolPrompt = 0; //false = 0
+
+    if( argc == 2 ) { //checks to see if batchfile is passed in
+        batchFileCheck(argv[1]);
+        boolPrompt = 1; //if batch file is passed in, prompt is changed to 1 (true)
+    }
+
+    /******** IO REDIRECTION ***********/
+/*
+    if( args[3] == "<" && fileCheck(args[4]) == 0 ){
+        const char* arg1 = args[1]; //argument to be passed to shell
+        const char* arg2 = args[2]; //2nd argument to be passed to shell
+        //freopen()
+
+        if(args[5] == "<"){ //output file is created if it does not exist and truncated if it does
+
+        }
+
+        else if(args[5] == "<<'"){ //output file is created if it does not exist and appended to if it does
+
+        }
+    }
+*/
+
+//***Finishing forking
+    /***********************************/
+    // keep reading input until "quit" command or eof redirected
+    while (!feof(stdin)) {
+        curDir = getcwd(display, FILENAME_MAX);
+
+        if(boolPrompt == 0) { //if batchfile is not passed in, prompt from user
+            fputs(curDir, stdout);
+            fputs(prompt, stdout);         // write prompt
+        }
+
+        if (fgets(buf, MAX_BUFFER, stdin)) { // read a line
+            // tokenize the input into args array
+
+            if(boolPrompt == 1) { //if batch is passed in, print prompt
+                printf("%s==>%s", curDir,buf); //prints prompt plus line from batchfile
+            }
+
+            arg = args;
+            *arg++ = strtok(buf, SEPARATORS);   // tokenize input
+                                                //tokenize the input into args array
+
+            while ((*arg++ = strtok(NULL, SEPARATORS)));// last entry will be NULL
+            if (args[0]) {                           // if there's anything is there
+                                                    // check for internal/external command
+                /**/if (!strcmp(args[0], "wipe")) { // "clear" command
+                    systemUsingFork("clear");
+                    continue;
+                }
+
+                    /**/else if (!strcmp(args[0], "esc")) {  // "quit" command
+                    break;                     // break out of 'while' loop
+                }
+
+                    /**/else if (!strcmp(args[0], "filez")) {
+                    funcFilez(args[1]);
+                }
+
+                    /**/else if (!strcmp(args[0], "ditto")) {
+                    int i = 1; //sets args to 1 to ignore first input of 0
+                    while (args[i] != NULL) {
+                        printf("%s ", args[i]); //prints array of user input
+                        i++;
+                    }
+                    printf("\n");
+                }
+
+                    /**/else if (!strcmp(args[0], "environ")) {
+                    funcEnviron(args[1]);
+                }
+
+                    /**/else if (!strcmp(args[0], "mimic")) {
+
+                   /* Calls functon to perform mimic if -r is not supplied. */
+                   if( strcmp(args[1], "-r") != 0) {
+                       funcMimic(args[1], args[2], args[3]);
+                    }
+
+                    //-r supplied existing directory srcM, existing directory - dstM
+                    else if(!strcmp(args[1], "-r") && directoryCheck(args[2]) != 0 && directoryCheck(args[3]) != 0) {
+                        //src directory and all of its contents are copied into dst
+
+                        DIR *srcDIR;
+                        struct dirent *sD;
+                        const char* pCheck = args[2];
+                        const char* destDir = args[3];
+
+                        char fullDirP[75] ={ 0 };
+                        strcpy(fullDirP, pCheck);
+
+                        if((srcDIR = opendir(pCheck)) == NULL) {
+                            fprintf(stderr, "ERROR");
+                        }
+
+
+                       int d = sizeof(fullDirP);
+                       while(d <= sizeof(fullDirP)){
+                           if(fullDirP[d] == '\0') {
+                               d--;
+                           }
+                           else if(fullDirP[d] != '/') {
+                               strcat(fullDirP, "/");
+                               break;
+                           }
+                           else{
+                               d = -1;
+                           }
+                       }
+
+
+                        //LIST DIRECTORY FUNCTION
+                        while((sD = readdir(srcDIR)) != NULL){
+                            DIR *opDIR;
+
+                            char sdName[50] = { 0 };
+                            char sdPath[50] = { 0 };
+                            strcpy(sdName, sD->d_name);
+                            strcpy(sdPath, fullDirP);
+                            strcat(sdPath, sdName);
+
+                            if(directoryCheck(sdPath) == 0) { //FILES
+                                char sdNameF[50] = { 0 };
+                                char sdPathF[50] = { 0 };
+                                strcpy(sdNameF, sD->d_name);
+                                strcpy(sdPathF, fullDirP);
+                                strcat(sdPathF, sdName);
+
+                                printf("THIS IS A FILE****: %s\n", sdPathF);
+
+                                /*** IT WORKS YAY ****/
+                                copyFileToDestination(sdPathF, destDir);
+                            }
+
+                            else if(directoryCheck(sdPath) != 0
+                                    && (strcmp(sD->d_name, "..") != 0)
+                                    && (strcmp(sD->d_name, ".") != 0)) {
+
+
+                                printf("______This is a directory*** %s\n", sdPath);
+
+                                funcChdir(destDir, NULL); //changes directory to destination
+
+                                const char* fileSrc= " ";
+                                fileSrc = getEndOfPath(sdPath);
+
+                                printf("______This is fileSrc: %s is a directory being created in destination path %s\n", fileSrc, destDir);
+
+                                if (mkdir(fileSrc, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == -1) {
+                                    fprintf(stderr, "ERROR: Directory failed to create.\n");
+                                }
+                                funcChdir(curDir, NULL); //changes back to current directory
+
+                                char newFileSrc[50] = { 0 };
+                                char currDestPath[50] = { 0 };
+                                strcpy(newFileSrc, fileSrc);
+                                strcpy(currDestPath, destDir);
+                                strcat(currDestPath, "/");
+                                strcat(currDestPath, newFileSrc);
+
+                                printf("______This is the current destination path %s\n", currDestPath);
+
+
+                                printf("______Opening directory sdPath %s\n", sdPath);
+
+
+                                if ((opDIR = opendir(sdPath)) == NULL) {
+                                    fprintf(stderr, "ERROR opening directory\n");
+                                }
+
+
+
+                                while( (sD = readdir(opDIR)) != NULL){
+                                    char sdName1[50] = { 0 };
+                                    char sdPath1[50] = { 0 };
+                                    strcpy(sdName1, sD->d_name);
+                                    strcpy(sdPath1, sdPath);
+                                    strcat(sdPath1, "/");
+                                    strcat(sdPath1, sdName1);
+
+                                    if(directoryCheck(sdPath1) != 0
+                                       &&
+                                       (strcmp(sD->d_name, "..") != 0)
+                                       && (strcmp(sD->d_name, ".") != 0) ){
+
+                                        /*TO READ*/printf("***** directory (inside the directory given) !: %s\n", (const char*) sdPath1);
+                                        ///*TO WRITE */printf("Will be copied to directory %s\n", destDir);
+
+                                        //change to destination directory
+                                        //create directory
+                                        //copy files from directory to destination directory
+
+                                    }
+
+                                    else if(directoryCheck(sdPath1) == 0 &&
+                                         (strcmp(sD->d_name, "..") != 0)
+                                         && (strcmp(sD->d_name, ".") != 0) ) {
+
+                                        char sdpathEnd[50] = { 0 };
+                                        char finalDestDirec[50] = { 0 };
+                                        char beginningPathFinal[50] = { 0 };
+                                        strcpy(sdpathEnd, sD->d_name);
+                                        strcpy(finalDestDirec, currDestPath);
+                                        strcat(finalDestDirec, "/");
+                                        strcat(finalDestDirec, sdpathEnd);
+
+                                        //**not neccassary if full path is given**
+                                        strcat(beginningPathFinal, fullDirP);
+                                        strcat(beginningPathFinal,finalDestDirec);
+
+
+                                        /*TO READ*/printf("````` Might be a file: %s\n", (const char*) sdPath1);
+                                       /*TO WRITE */ printf("Will be copied to directory %s\n", (const char*)finalDestDirec);
+
+
+
+                                        mode_t mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+
+                                        int origPath = open((const char*) sdPath1, O_RDONLY, mode);
+                                        int srcHandle = open((const char*)finalDestDirec, O_CREAT | O_WRONLY | O_SYNC | O_APPEND, S_IRUSR | S_IWUSR | S_IRGRP);
+
+                                        int errnum;
+                                        if( srcHandle == -1) {
+                                            errnum = errno;
+                                            fprintf(stderr, "ERROR: creating to file: %s\n", strerror(errnum));
+                                        }
+
+                                        char bufRead[MAX_BUFFER];
+                                        size_t nbytes = sizeof(bufRead);
+
+                                        if(read(origPath, bufRead, nbytes) < 0){
+                                            errnum = errno;
+                                            fprintf(stderr, "ERROR: reading to file: %s\n", strerror(errnum));
+                                        }
+
+
+                                         if(write(srcHandle, bufRead, nbytes) != nbytes){
+                                             errnum = errno;
+                                             fprintf(stderr, "ERROR: writing to file: %s\n", strerror(errnum));
+                                        }
+                                        
+                                        close(srcHandle);
+                                        close(origPath);
+
+
+
+                                         //copyFileToDestinationFULLPATH((const char*)sdPath1,(const char*)finalDestDirec);
+
+
+
+
+                                    }
+
+                                }
+                            }
+                        }
+
+
+                    }
+
+                    //-r NOT supplied, & srcM directory is empty,
+
+                }
+
+                    /**/else if (!strcmp(args[0], "help")) {
+                    funcHelp(args[1]);
+                }
+
+                    /**/else if (!strcmp(args[0], "erase")) {
+                    funcErase(args[1], args[2]);
+                }
+
+                    /**/else if (!strcmp(args[0], "morph")) {
+                    funcMorph(args[1], args[2]);
+                }
+                    /**/else if (!strcmp(args[0], "chdir")) {
+                    funcChdir(args[1], args[2]);
+                }
+                    /**/else if (!strcmp(args[0], "rmdirz")) {
+                    funcRmdirz(args[1]);
+
+                }
+                    /**/else if (!strcmp(args[0], "mkdirz")) {
+                    funcMkdirz(args[1]);
+                }
+
+                    /**/else if(args[0] != NULL && args[1] == NULL){ //if only one argument is passed in, automatically passed to OS
+                    systemUsingFork(buf);
+
+                    setbuf(stdout, NULL);
+                }
+
+
+
+                    /**/else if ( args[0] != NULL && args[1] != NULL && args[2] == NULL) { //if more than one argument is passed in
+
+                    char command[50] = " ";
+
+                    //string concatenates args[] inputs, that were tokenized in beginning of file
+                    strcat(strcat(strcat(command, args[0]), " "), args[1]);
+
+                    systemUsingFork(command);
+                }
+                    /**/else if( args[0] != NULL && args[1] != NULL && args[3] != NULL && args[4] == NULL ) { //fixing echo
+                    char commandF[50] = " ";
+                    char com1[50] = " ";
+                    char com2[50] = " ";
+                    char com3[50] = " ";
+
+                    strcpy(commandF, args[0]);
+                    strcpy(com1, args[1]);
+                    strcpy(com2, args[2]);
+                    strcpy(com3, args[3]);
+
+                    strcat(commandF, " ");
+                    strcat(commandF, com1);
+                    strcat(commandF, " ");
+                    strcat(commandF, com2);
+                    strcat(commandF, " ");
+                    strcat(commandF, com3);
+
+                    printf("command passed in%s\n", (const char*) commandF);
+                    systemUsingFork(commandF);
+
+                }
+
+                }
+            }
+        }
+
+
+    return 0;
+}
+
+
