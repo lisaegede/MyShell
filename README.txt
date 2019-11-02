@@ -1,8 +1,7 @@
-Directions on how to run your code:
 
 ****** WELCOME TO MY SHELL***************************
 
--R EMEMBER: Case matters
+-REMEMBER: Case matters
 
 The following commands:
 
