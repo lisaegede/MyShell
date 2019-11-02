@@ -30,10 +30,9 @@ chdir [path] – changes present working directory
 
 Building a Shell
 Name: Lisa Egede
-Email Address: lisaegede@ou.edu
 
 
-My Approach: (Going off of my previous project1 implementation) When executing morph and mimic, I decided to combine both morph and mimic to increase efficiency. When I call the -r using either morph or mimic, I utilize the same function by checking see whether or not a mimic or morph is passed. Another tool that I implemented, is making use of system using execvp. I created a system function using fork to utilize this, and referenced it frequently, instead of copying and pasting code. I also made use of strcat, because it allowed me to create the directories, and made it easier for me to keep track of each directory I traversed through. 
+My Approach: When executing morph and mimic, I decided to combine both morph and mimic to increase efficiency. When I call the -r using either morph or mimic, I utilize the same function by checking see whether or not a mimic or morph is passed. Another tool that I implemented, is making use of system using execvp. I created a system function using fork to utilize this, and referenced it frequently, instead of copying and pasting code. I also made use of strcat, because it allowed me to create the directories, and made it easier for me to keep track of each directory I traversed through. 
 
 ***********************************************************
 A declaration of references:
